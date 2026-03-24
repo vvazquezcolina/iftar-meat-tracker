@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isAdminRequest } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth';
 import { getPrices, updatePrice } from '@/lib/sheets';
 
 export async function GET() {
@@ -14,7 +14,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    if (!isAdminRequest(request)) {
+    if (!isAdmin(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

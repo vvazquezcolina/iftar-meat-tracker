@@ -34,6 +34,10 @@ export default function Home() {
             Punto de Venta
           </Link>
         </div>
+
+        <p className="mt-10 text-sm text-gray-500 text-center">
+          Registra, etiqueta y vende carne con seguimiento por QR.
+        </p>
       </div>
     </div>
   );

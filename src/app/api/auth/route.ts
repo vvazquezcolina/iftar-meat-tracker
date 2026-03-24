@@ -1,20 +1,37 @@
 import { NextResponse } from 'next/server';
-import { validateAdminPin } from '@/lib/auth';
+import { authenticateUser, getUsers } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { pin } = body;
+    const { name, pin } = body;
 
-    if (!pin) {
-      return NextResponse.json({ error: 'Missing required field: pin' }, { status: 400 });
+    if (!name || !pin) {
+      return NextResponse.json({ error: 'Missing required fields: name, pin' }, { status: 400 });
     }
 
-    const success = validateAdminPin(pin);
+    const user = authenticateUser(name, pin);
 
-    return NextResponse.json({ success }, { status: 200 });
+    if (user) {
+      return NextResponse.json(
+        { success: true, user: { name: user.name, role: user.role } },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json({ success: false }, { status: 200 });
   } catch (error) {
     console.error('Error validating auth:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function GET() {
+  try {
+    const users = getUsers();
+    return NextResponse.json(users, { status: 200 });
+  } catch (error) {
+    console.error('Error fetching users:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

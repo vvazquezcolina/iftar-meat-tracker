@@ -73,7 +73,7 @@ export async function getProduct(qrId: string): Promise<Product | null> {
   const sheets = await getSheets();
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'Inventario!A2:L',
+    range: 'Inventario!A2:M',
   });
 
   const rows = response.data.values || [];
@@ -89,7 +89,8 @@ export async function getProduct(qrId: string): Promise<Product | null> {
 export async function registerProduct(
   qrId: string,
   tipoCarne: string,
-  pesoKg: number
+  pesoKg: number,
+  registradoPor: string
 ): Promise<Product> {
   const prices = await getPrices();
   const priceEntry = prices.find((p) => p.tipo_carne === tipoCarne);
@@ -112,7 +113,7 @@ export async function registerProduct(
   const sheets = await getSheets();
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'Inventario!A:L',
+    range: 'Inventario!A:M',
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [
@@ -125,6 +126,7 @@ export async function registerProduct(
           'Disponible',
           fechaRegistro,
           horaRegistro,
+          registradoPor, // registrado_por
           '', // fecha_venta
           '', // hora_venta
           '', // vendido_por
@@ -143,14 +145,15 @@ export async function registerProduct(
     estatus: 'Disponible',
     fecha_registro: fechaRegistro,
     hora_registro: horaRegistro,
+    registrado_por: registradoPor,
   };
 }
 
-export async function markSold(qrId: string): Promise<void> {
+export async function markSold(qrId: string, vendidoPor?: string): Promise<void> {
   const sheets = await getSheets();
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'Inventario!A2:L',
+    range: 'Inventario!A2:M',
   });
 
   const rows = response.data.values || [];
@@ -179,7 +182,7 @@ export async function markSold(qrId: string): Promise<void> {
     hour12: false,
   });
 
-  // Update estatus (column F), fecha_venta (column I), hora_venta (column J)
+  // Update estatus (column F), fecha_venta (column J), hora_venta (column K), vendido_por (column L)
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `Inventario!F${rowIndex}`,
@@ -191,10 +194,10 @@ export async function markSold(qrId: string): Promise<void> {
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
-    range: `Inventario!I${rowIndex}:J${rowIndex}`,
+    range: `Inventario!J${rowIndex}:L${rowIndex}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
-      values: [[fechaVenta, horaVenta]],
+      values: [[fechaVenta, horaVenta, vendidoPor || '']],
     },
   });
 }
@@ -217,7 +220,7 @@ export async function getAllProducts(): Promise<Product[]> {
   const sheets = await getSheets();
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'Inventario!A2:L',
+    range: 'Inventario!A2:M',
   });
 
   const rows = response.data.values || [];
@@ -234,9 +237,10 @@ function rowToProduct(row: string[]): Product {
     estatus: (row[5] as 'Disponible' | 'Vendido') || 'Disponible',
     fecha_registro: row[6] || '',
     hora_registro: row[7] || '',
-    fecha_venta: row[8] || undefined,
-    hora_venta: row[9] || undefined,
-    vendido_por: row[10] || undefined,
-    notas: row[11] || undefined,
+    registrado_por: row[8] || undefined,
+    fecha_venta: row[9] || undefined,
+    hora_venta: row[10] || undefined,
+    vendido_por: row[11] || undefined,
+    notas: row[12] || undefined,
   };
 }

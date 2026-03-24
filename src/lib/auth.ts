@@ -1,24 +1,31 @@
-export function validateAdminPin(pin: string): boolean {
-  const adminPin = process.env.ADMIN_PIN || '1234';
-  return pin === adminPin;
+export interface User {
+  name: string;
+  pin: string;
+  role: 'admin' | 'pos';
 }
 
-export function isAdminRequest(request: Request): boolean {
-  const headerPin = request.headers.get('x-admin-pin');
-  if (headerPin && validateAdminPin(headerPin)) {
-    return true;
-  }
+const USERS: User[] = [
+  { name: 'Noe', pin: '1234', role: 'admin' },
+  { name: 'Mauricio', pin: '5678', role: 'admin' },
+  { name: 'FK', pin: '0000', role: 'pos' },
+];
 
-  const cookieHeader = request.headers.get('cookie');
-  if (cookieHeader) {
-    const cookies = cookieHeader.split(';').map((c) => c.trim());
-    for (const cookie of cookies) {
-      const [name, value] = cookie.split('=');
-      if (name === 'admin_pin' && validateAdminPin(value)) {
-        return true;
-      }
-    }
-  }
+export function authenticateUser(name: string, pin: string): User | null {
+  return USERS.find(u => u.name === name && u.pin === pin) || null;
+}
 
-  return false;
+export function getUsers(): { name: string; role: string }[] {
+  return USERS.map(u => ({ name: u.name, role: u.role }));
+}
+
+export function getUserFromRequest(request: Request): User | null {
+  const userName = request.headers.get('x-user-name');
+  const userPin = request.headers.get('x-user-pin');
+  if (!userName || !userPin) return null;
+  return authenticateUser(userName, userPin);
+}
+
+export function isAdmin(request: Request): boolean {
+  const user = getUserFromRequest(request);
+  return user?.role === 'admin';
 }

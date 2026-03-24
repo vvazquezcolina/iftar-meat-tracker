@@ -1,13 +1,43 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+
+interface AuthUser {
+  name: string;
+  role: string;
+}
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [selectedUser, setSelectedUser] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/auth');
+      const data = await res.json();
+      const adminUsers = (data.users || []).filter(
+        (u: AuthUser) => u.role === 'admin'
+      );
+      setUsers(adminUsers);
+      if (adminUsers.length > 0) {
+        setSelectedUser(adminUsers[0].name);
+      }
+    } catch {
+      setError('Error al cargar usuarios');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   const handleKeypad = (digit: string) => {
     if (pin.length < 6) {
@@ -22,6 +52,10 @@ export default function AdminLoginPage() {
   };
 
   const handleSubmit = async () => {
+    if (!selectedUser) {
+      setError('Selecciona un usuario');
+      return;
+    }
     if (pin.length < 4) {
       setError('El PIN debe tener al menos 4 digitos');
       return;
@@ -34,13 +68,15 @@ export default function AdminLoginPage() {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({ name: selectedUser, pin }),
       });
 
       const data = await res.json();
 
       if (data.success) {
-        localStorage.setItem('admin-pin', pin);
+        localStorage.setItem('user_name', data.user.name);
+        localStorage.setItem('user_pin', pin);
+        localStorage.setItem('user_role', data.user.role);
         router.push('/admin/dashboard');
       } else {
         setError('PIN incorrecto');
@@ -73,6 +109,42 @@ export default function AdminLoginPage() {
           <h1 className="text-3xl font-bold text-white">QR Carne Tracker</h1>
           <p className="text-amber-500 font-semibold mt-1 text-lg">Panel Admin</p>
         </div>
+
+        {/* User Selector */}
+        {loadingUsers ? (
+          <div className="flex items-center gap-2 text-gray-400">
+            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Cargando usuarios...
+          </div>
+        ) : (
+          <div className="w-full max-w-xs">
+            <label className="block text-sm font-medium text-gray-400 mb-2 text-center">
+              Selecciona tu usuario
+            </label>
+            <div className="flex gap-2 justify-center">
+              {users.map((user) => (
+                <button
+                  key={user.name}
+                  type="button"
+                  onClick={() => {
+                    setSelectedUser(user.name);
+                    setError('');
+                  }}
+                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-lg transition-all ${
+                    selectedUser === user.name
+                      ? 'bg-amber-500 text-gray-950 scale-105'
+                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  {user.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* PIN Display */}
         <div className="flex gap-3 justify-center">
@@ -136,7 +208,7 @@ export default function AdminLoginPage() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={loading || pin.length < 4}
+          disabled={loading || pin.length < 4 || !selectedUser}
           className="w-full max-w-xs min-h-14 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-gray-950 font-bold text-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {loading ? (

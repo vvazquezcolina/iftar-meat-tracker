@@ -13,6 +13,11 @@ const QrScanner = dynamic(() => import('@/components/QrScanner'), {
 
 type ViewState = 'idle' | 'scanning' | 'loading' | 'product' | 'sold' | 'error';
 
+interface AuthUser {
+  name: string;
+  role: string;
+}
+
 export default function POSPage() {
   const [view, setView] = useState<ViewState>('idle');
   const [product, setProduct] = useState<Product | null>(null);
@@ -20,12 +25,94 @@ export default function POSPage() {
   const [selling, setSelling] = useState(false);
   const [scannerAvailable, setScannerAvailable] = useState<boolean | null>(null);
 
+  // Auth state
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [userRole, setUserRole] = useState('');
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [selectedUser, setSelectedUser] = useState('');
+  const [pinInput, setPinInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Check existing login on mount
+  useEffect(() => {
+    const storedName = localStorage.getItem('user_name');
+    const storedPin = localStorage.getItem('user_pin');
+    const storedRole = localStorage.getItem('user_role');
+    if (storedName && storedPin && storedRole) {
+      setUserName(storedName);
+      setUserRole(storedRole);
+      setIsLoggedIn(true);
+    }
+    setCheckingAuth(false);
+  }, []);
+
+  // Fetch users for login dropdown
+  useEffect(() => {
+    if (!isLoggedIn && !checkingAuth) {
+      fetch('/api/auth')
+        .then((res) => res.json())
+        .then((data: AuthUser[]) => {
+          setUsers(data);
+          if (data.length > 0) setSelectedUser(data[0].name);
+        })
+        .catch(() => setAuthError('Error al cargar usuarios'));
+    }
+  }, [isLoggedIn, checkingAuth]);
+
   // Check if QrScanner component exists
   useEffect(() => {
     import('@/components/QrScanner')
       .then(() => setScannerAvailable(true))
       .catch(() => setScannerAvailable(false));
   }, []);
+
+  const handleLogin = async () => {
+    if (!selectedUser || !pinInput) {
+      setAuthError('Selecciona un usuario e ingresa el PIN');
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selectedUser, pin: pinInput }),
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        localStorage.setItem('user_name', data.user.name);
+        localStorage.setItem('user_pin', pinInput);
+        localStorage.setItem('user_role', data.user.role);
+        setUserName(data.user.name);
+        setUserRole(data.user.role);
+        setIsLoggedIn(true);
+        setPinInput('');
+        setAuthError('');
+      } else {
+        setAuthError('PIN incorrecto');
+      }
+    } catch {
+      setAuthError('Error de conexión');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('user_name');
+    localStorage.removeItem('user_pin');
+    localStorage.removeItem('user_role');
+    setIsLoggedIn(false);
+    setUserName('');
+    setUserRole('');
+    setPinInput('');
+    setSelectedUser(users.length > 0 ? users[0].name : '');
+    reset();
+  };
 
   const startScan = () => {
     setView('scanning');
@@ -60,10 +147,16 @@ export default function POSPage() {
     if (!product) return;
     setSelling(true);
     try {
+      const storedName = localStorage.getItem('user_name') || '';
+      const storedPin = localStorage.getItem('user_pin') || '';
       const res = await fetch('/api/product/sell', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qr_id: product.qr_id }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-name': storedName,
+          'x-user-pin': storedPin,
+        },
+        body: JSON.stringify({ qr_id: product.qr_id, vendido_por: storedName }),
       });
       if (res.ok) {
         setProduct({ ...product, estatus: 'Vendido' });
@@ -86,13 +179,140 @@ export default function POSPage() {
     setErrorMsg('');
   };
 
+  // Show loading while checking auth
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center">
+        <div className="w-10 h-10 border-4 border-gray-700 border-t-green-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Login screen
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+        <div className="flex-1 w-full max-w-md mx-auto flex flex-col px-4 py-6">
+          <Link href="/" className="flex items-center gap-2 text-gray-400 hover:text-white mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+            Inicio
+          </Link>
+
+          <header className="text-center mb-8">
+            <h1 className="text-3xl font-bold tracking-tight">Punto de Venta</h1>
+            <p className="text-gray-400 text-lg mt-1">Inicia sesión para continuar</p>
+          </header>
+
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <div className="w-full bg-gray-800 rounded-2xl p-6 space-y-5">
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">Usuario</label>
+                <select
+                  value={selectedUser}
+                  onChange={(e) => {
+                    setSelectedUser(e.target.value);
+                    setAuthError('');
+                  }}
+                  className="w-full min-h-14 bg-gray-700 text-white text-lg rounded-xl px-4 focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none cursor-pointer"
+                >
+                  {users.map((u) => (
+                    <option key={u.name} value={u.name}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={pinInput}
+                  onChange={(e) => {
+                    setPinInput(e.target.value.replace(/\D/g, ''));
+                    setAuthError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleLogin();
+                  }}
+                  placeholder="••••"
+                  className="w-full min-h-14 bg-gray-700 text-white text-lg rounded-xl px-4 text-center tracking-[0.5em] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  autoFocus
+                />
+              </div>
+
+              {authError && (
+                <p className="text-red-400 text-sm text-center">{authError}</p>
+              )}
+
+              <button
+                onClick={handleLogin}
+                disabled={authLoading || !selectedUser || !pinInput}
+                className="w-full min-h-14 bg-green-500 hover:bg-green-600 active:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl transition-colors duration-150 flex items-center justify-center gap-2"
+              >
+                {authLoading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  'Entrar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main POS interface (logged in)
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="flex-1 w-full max-w-md mx-auto flex flex-col px-4 py-6">
+        {/* Back button */}
+        <Link href="/" className="flex items-center gap-2 text-gray-400 hover:text-white mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+          </svg>
+          Inicio
+        </Link>
+
         {/* Header */}
-        <header className="text-center mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">French Kebab</h1>
-          <p className="text-gray-400 text-lg mt-1">Punto de Venta</p>
+        <header className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Punto de Venta</h1>
+              <p className="text-gray-400 text-lg mt-1">{userName}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-gray-400 hover:text-red-400 text-sm font-medium px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+          {/* Admin & History links */}
+          <div className="flex items-center gap-4 mt-3">
+            <Link
+              href="/pos/historial"
+              className="text-gray-400 hover:text-gray-300 text-sm underline underline-offset-4 transition-colors"
+            >
+              Ver ventas del día
+            </Link>
+            {userRole === 'admin' && (
+              <Link
+                href="/admin/dashboard"
+                className="text-amber-400 hover:text-amber-300 text-sm underline underline-offset-4 transition-colors"
+              >
+                Ir a Admin
+              </Link>
+            )}
+          </div>
         </header>
 
         {/* Idle - Scan Button */}
@@ -119,12 +339,6 @@ export default function POSPage() {
             >
               Escanear QR
             </button>
-            <Link
-              href="/pos/historial"
-              className="text-gray-400 hover:text-gray-300 text-sm underline underline-offset-4 transition-colors"
-            >
-              Ver ventas del día
-            </Link>
           </div>
         )}
 
@@ -217,6 +431,7 @@ export default function POSPage() {
               <p className="text-green-400 text-3xl font-bold mt-3">
                 ${product.precio_total.toFixed(2)}
               </p>
+              <p className="text-gray-500 text-sm mt-2">Vendido por: {userName}</p>
             </div>
 
             <button
@@ -268,7 +483,7 @@ export default function POSPage() {
   );
 }
 
-/* ─── Sub-components ──────────────────────────────────────────── */
+/* --- Sub-components ------------------------------------------------ */
 
 function ProductCard({ product }: { product: Product }) {
   return (

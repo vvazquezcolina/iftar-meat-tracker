@@ -3,7 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import Link from 'next/link';
 import type { Product } from '@/lib/types';
+
+interface AuthUser {
+  name: string;
+  role: string;
+}
 
 function ScanContent() {
   const searchParams = useSearchParams();
@@ -15,6 +21,14 @@ function ScanContent() {
   const [error, setError] = useState('');
   const [selling, setSelling] = useState(false);
   const [sold, setSold] = useState(false);
+
+  // Seller auth state
+  const [showSellerPrompt, setShowSellerPrompt] = useState(false);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [selectedSeller, setSelectedSeller] = useState('');
+  const [sellerPin, setSellerPin] = useState('');
+  const [sellerError, setSellerError] = useState('');
+  const [sellerName, setSellerName] = useState('');
 
   useEffect(() => {
     if (!id) {
@@ -46,17 +60,72 @@ function ScanContent() {
     fetchProduct();
   }, [id]);
 
-  const handleSell = async () => {
+  const handleSellClick = async () => {
+    // Check if user is already logged in from POS
+    const storedName = localStorage.getItem('user_name');
+    const storedPin = localStorage.getItem('user_pin');
+    if (storedName && storedPin) {
+      // Already logged in, sell directly
+      await executeSell(storedName, storedPin);
+    } else {
+      // Need to ask who is selling
+      if (users.length === 0) {
+        try {
+          const res = await fetch('/api/auth');
+          const data: AuthUser[] = await res.json();
+          setUsers(data);
+          if (data.length > 0) setSelectedSeller(data[0].name);
+        } catch {
+          setError('Error al cargar usuarios');
+          return;
+        }
+      }
+      setShowSellerPrompt(true);
+    }
+  };
+
+  const handleSellerConfirm = async () => {
+    if (!selectedSeller || !sellerPin) {
+      setSellerError('Selecciona un usuario e ingresa el PIN');
+      return;
+    }
+    setSellerError('');
+
+    // Verify PIN
+    try {
+      const authRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selectedSeller, pin: sellerPin }),
+      });
+      const authData = await authRes.json();
+      if (!authData.success) {
+        setSellerError('PIN incorrecto');
+        return;
+      }
+      await executeSell(selectedSeller, sellerPin);
+    } catch {
+      setSellerError('Error de conexión');
+    }
+  };
+
+  const executeSell = async (name: string, pin: string) => {
     if (!product) return;
     setSelling(true);
+    setShowSellerPrompt(false);
     try {
       const res = await fetch('/api/product/sell', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qr_id: product.qr_id }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-name': name,
+          'x-user-pin': pin,
+        },
+        body: JSON.stringify({ qr_id: product.qr_id, vendido_por: name }),
       });
       if (res.ok) {
         setProduct({ ...product, estatus: 'Vendido' });
+        setSellerName(name);
         setSold(true);
       } else {
         setError('Error al registrar venta');
@@ -168,6 +237,82 @@ function ScanContent() {
           <p className="text-green-400 text-3xl font-bold mt-3">
             ${product.precio_total.toFixed(2)}
           </p>
+          {sellerName && (
+            <p className="text-gray-500 text-sm mt-2">Vendido por: {sellerName}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Seller prompt modal
+  if (showSellerPrompt) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        <div className="w-full bg-gray-800 rounded-2xl p-6 space-y-5">
+          <h2 className="text-xl font-bold text-center">Identificación del Vendedor</h2>
+
+          <div>
+            <label className="block text-gray-400 text-sm mb-2">Usuario</label>
+            <select
+              value={selectedSeller}
+              onChange={(e) => {
+                setSelectedSeller(e.target.value);
+                setSellerError('');
+              }}
+              className="w-full min-h-14 bg-gray-700 text-white text-lg rounded-xl px-4 focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none cursor-pointer"
+            >
+              {users.map((u) => (
+                <option key={u.name} value={u.name}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-gray-400 text-sm mb-2">PIN</label>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              value={sellerPin}
+              onChange={(e) => {
+                setSellerPin(e.target.value.replace(/\D/g, ''));
+                setSellerError('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSellerConfirm();
+              }}
+              placeholder="••••"
+              className="w-full min-h-14 bg-gray-700 text-white text-lg rounded-xl px-4 text-center tracking-[0.5em] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+              autoFocus
+            />
+          </div>
+
+          {sellerError && (
+            <p className="text-red-400 text-sm text-center">{sellerError}</p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setShowSellerPrompt(false);
+                setSellerPin('');
+                setSellerError('');
+              }}
+              className="flex-1 min-h-14 bg-gray-700 hover:bg-gray-600 text-gray-300 text-lg font-semibold rounded-xl transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSellerConfirm}
+              disabled={!selectedSeller || !sellerPin}
+              className="flex-1 min-h-14 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl transition-colors"
+            >
+              Confirmar
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -231,7 +376,7 @@ function ScanContent() {
         {/* Action */}
         {product.estatus === 'Disponible' ? (
           <button
-            onClick={handleSell}
+            onClick={handleSellClick}
             disabled={selling}
             className="w-full min-h-16 bg-green-500 hover:bg-green-600 active:bg-green-700 disabled:bg-green-800 disabled:cursor-not-allowed text-white text-2xl font-bold rounded-2xl transition-colors duration-150 shadow-lg shadow-green-500/25 flex items-center justify-center gap-3"
           >
@@ -264,6 +409,14 @@ export default function ScanPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="flex-1 w-full max-w-md mx-auto flex flex-col px-4 py-6">
+        {/* Back / Home button */}
+        <Link href="/" className="flex items-center gap-2 text-gray-400 hover:text-white mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+          </svg>
+          Inicio
+        </Link>
+
         {/* Header */}
         <header className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight">French Kebab</h1>

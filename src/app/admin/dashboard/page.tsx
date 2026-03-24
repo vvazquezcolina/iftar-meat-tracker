@@ -11,25 +11,31 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [userName, setUserName] = useState('');
+
   useEffect(() => {
-    const pin = localStorage.getItem('admin-pin');
-    if (!pin) {
+    const storedName = localStorage.getItem('user_name');
+    if (!storedName) {
       router.replace('/admin');
       return;
     }
-
-    fetchDashboard(pin);
+    setUserName(storedName);
+    fetchDashboard();
   }, [router]);
 
-  const fetchDashboard = async (pin: string) => {
+  const fetchDashboard = async () => {
     try {
+      const name = localStorage.getItem('user_name') || '';
+      const pin = localStorage.getItem('user_pin') || '';
       const res = await fetch('/api/dashboard', {
-        headers: { 'x-admin-pin': pin },
+        headers: { 'x-user-name': name, 'x-user-pin': pin },
       });
 
       if (!res.ok) {
         if (res.status === 401) {
-          localStorage.removeItem('admin-pin');
+          localStorage.removeItem('user_name');
+          localStorage.removeItem('user_pin');
+          localStorage.removeItem('user_role');
           router.replace('/admin');
           return;
         }
@@ -46,7 +52,9 @@ export default function DashboardPage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('admin-pin');
+    localStorage.removeItem('user_name');
+    localStorage.removeItem('user_pin');
+    localStorage.removeItem('user_role');
     router.replace('/admin');
   };
 
@@ -81,9 +89,20 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-6">
+      {/* Back button */}
+      <button onClick={() => router.push('/')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+        </svg>
+        Inicio
+      </button>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        <div>
+          <p className="text-sm text-gray-400">Hola, {userName}</p>
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        </div>
         <button
           onClick={handleLogout}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm font-medium transition-colors"
@@ -152,6 +171,16 @@ export default function DashboardPage() {
                 <span className="text-sm">Generar QR Codes</span>
               </Link>
             </div>
+
+            <Link
+              href="/pos"
+              className="flex items-center gap-4 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl px-5 min-h-14 font-semibold text-lg transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+              </svg>
+              <span className="text-white">Punto de Venta</span>
+            </Link>
           </div>
 
           {/* Recent Products */}

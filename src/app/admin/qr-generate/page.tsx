@@ -10,15 +10,17 @@ export default function QrGeneratePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [pin, setPin] = useState('');
+  const [userName, setUserName] = useState('');
+  const [userPin, setUserPin] = useState('');
 
   useEffect(() => {
-    const storedPin = localStorage.getItem('admin-pin');
-    if (!storedPin) {
+    const storedName = localStorage.getItem('user_name');
+    if (!storedName) {
       router.replace('/admin');
       return;
     }
-    setPin(storedPin);
+    setUserName(storedName);
+    setUserPin(localStorage.getItem('user_pin') || '');
   }, [router]);
 
   const formatId = (num: number): string => {
@@ -44,7 +46,8 @@ export default function QrGeneratePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-pin': pin,
+          'x-user-name': userName,
+          'x-user-pin': userPin,
         },
         body: JSON.stringify({ cantidad, inicio }),
       });
@@ -80,16 +83,16 @@ export default function QrGeneratePage() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-6">
+      {/* Back button */}
+      <button onClick={() => router.push('/admin/dashboard')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+        </svg>
+        Volver
+      </button>
+
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => router.push('/admin/dashboard')}
-          className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
         <h1 className="text-2xl font-bold text-white">Generar QR Codes</h1>
       </div>
 

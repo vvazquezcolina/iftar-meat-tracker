@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { isAdminRequest } from '@/lib/auth';
+import { getUserFromRequest } from '@/lib/auth';
 import { registerProduct } from '@/lib/sheets';
 
 export async function POST(request: Request) {
   try {
-    if (!isAdminRequest(request)) {
+    const user = getUserFromRequest(request);
+    if (!user || user.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const product = await registerProduct(qr_id, tipo_carne, peso_kg);
+    const product = await registerProduct(qr_id, tipo_carne, peso_kg, user.name);
 
     return NextResponse.json(product, { status: 201 });
   } catch (error) {

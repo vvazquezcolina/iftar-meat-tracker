@@ -1,16 +1,23 @@
 import { NextResponse } from 'next/server';
+import { getUserFromRequest } from '@/lib/auth';
 import { markSold } from '@/lib/sheets';
 
 export async function POST(request: Request) {
   try {
+    const user = getUserFromRequest(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
-    const { qr_id } = body;
+    const { qr_id, vendido_por } = body;
 
     if (!qr_id) {
       return NextResponse.json({ error: 'Missing required field: qr_id' }, { status: 400 });
     }
 
-    await markSold(qr_id);
+    const seller = vendido_por || user.name;
+    await markSold(qr_id, seller);
 
     return NextResponse.json({ success: true, message: 'Product marked as sold' }, { status: 200 });
   } catch (error) {

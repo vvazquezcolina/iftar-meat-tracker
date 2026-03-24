@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { isAdminRequest } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth';
 import { getDashboardStats } from '@/lib/sheets';
 
 export async function GET(request: Request) {
   try {
-    if (!isAdminRequest(request)) {
+    if (!isAdmin(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
