@@ -4,9 +4,25 @@ import { Product, Price, DashboardStats } from './types';
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID || '1NWuW5i-ExtqAKjhuLEMeoxz9muh-Lybe9KS5MDXdC28';
 
 export async function getSheets(): Promise<sheets_v4.Sheets> {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const rawKey = process.env.GOOGLE_PRIVATE_KEY || '';
-  const privateKey = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
+  let email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
+
+  // Support GOOGLE_CREDENTIALS as a full JSON credential (most reliable for Vercel)
+  const creds = process.env.GOOGLE_CREDENTIALS;
+  if (creds) {
+    try {
+      const parsed = JSON.parse(creds);
+      email = parsed.client_email;
+      privateKey = parsed.private_key;
+    } catch {
+      // fall through to individual env vars
+    }
+  }
+
+  // Handle escaped newlines in private key
+  if (privateKey.includes('\\n')) {
+    privateKey = privateKey.replace(/\\n/g, '\n');
+  }
 
   const auth = new google.auth.JWT({
     email,
