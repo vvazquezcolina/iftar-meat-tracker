@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Iftar Meat Tracker
 
-## Getting Started
+> A QR-based meat sales tracker for a French kebab restaurant in Playa del Carmen during Ramadan. Each slice of meat gets a QR code, servers scan at the point of sale, and every scan pushes a row to Google Sheets for real-time iftar-window reporting.
 
-First, run the development server:
+**Live:** [iftar-meat-tracker.vercel.app](https://iftar-meat-tracker.vercel.app)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+![Next.js](https://img.shields.io/badge/Next.js-000)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178c6)
+![Deploy](https://img.shields.io/badge/deploy-Vercel-000)
+
+---
+
+## Why this exists
+
+During Ramadan, the iftar rush compresses a whole day's service into a 90-minute window. The owner of a Halal French kebab restaurant in Playa del Carmen needed to know, in real time, how much meat had been sold, when, and by whom — without slowing service to a crawl.
+
+This app replaces a paper clipboard with a QR scan. Everything flows through Google Sheets so the existing bookkeeping stays unchanged.
+
+## Features
+
+- **QR generation** — every portion of meat gets its own code via the `qrcode` library
+- **QR scanning** — in-browser scanner using `html5-qrcode`, no native app required
+- **Google Sheets sync** — each scan writes a timestamped row via `googleapis`, with retries on network hiccups
+- **Bulk export** — a server route zips the daily sheet + QR images into a downloadable archive using `archiver` + `jszip`
+- **Timezone-aware** — all timestamps are recorded in America/Cancún so iftar windows line up with local prayer times
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Framework | Next.js (App Router) + TypeScript |
+| QR in | `html5-qrcode` (camera-based scan) |
+| QR out | `qrcode` (SVG/PNG generation) |
+| Storage | Google Sheets via `googleapis` |
+| Archives | `archiver` + `jszip` |
+| Hosting | Vercel |
+
+## Architecture
+
+```
+src/
+├── app/
+│   ├── page.tsx             # Scanner UI
+│   ├── api/
+│   │   ├── scan/            # POST: append row to Sheets
+│   │   ├── generate/        # GET: create a batch of QR codes
+│   │   └── export/          # GET: zip a day's data
+│   └── layout.tsx
+├── lib/
+│   ├── sheets.ts            # Google Sheets adapter
+│   └── qr.ts                # QR generation helpers
+└── scripts/                 # One-off setup scripts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Running locally
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+git clone https://github.com/vvazquezcolina/iftar-meat-tracker.git
+cd iftar-meat-tracker
+npm install
+cp .env.example .env.local   # Google service account JSON + Sheet ID
+npm run dev                  # http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Environment variables
 
-## Learn More
+```bash
+GOOGLE_SERVICE_ACCOUNT_EMAIL=...
+GOOGLE_PRIVATE_KEY=...
+SHEET_ID=...
+TIMEZONE=America/Cancun
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Command | Description |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build |
+| `npm run lint` | ESLint |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Status
 
-## Deploy on Vercel
+Seasonal tool — used during Ramadan 2026. Kept online in case the owner wants to run it again.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Author:** [Victor Vazquez](https://github.com/vvazquezcolina) — Cancún MX. Built for a local restaurant in Playa del Carmen.
