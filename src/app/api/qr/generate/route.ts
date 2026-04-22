@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import QRCode from 'qrcode';
 import archiver from 'archiver';
 import { PassThrough } from 'stream';
+import { formatQrSerieId, QR_SERIE_MAX_TOTAL } from '@/lib/qr-serie';
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,23 @@ export async function POST(request: Request) {
     if (!cantidad || cantidad < 1) {
       return NextResponse.json(
         { error: 'Missing or invalid required field: cantidad' },
+        { status: 400 }
+      );
+    }
+
+    if (cantidad > QR_SERIE_MAX_TOTAL) {
+      return NextResponse.json(
+        {
+          error: `La cantidad no puede superar ${QR_SERIE_MAX_TOTAL} por solicitud`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const startNum = typeof inicio === 'number' ? inicio : parseInt(String(inicio), 10);
+    if (!Number.isFinite(startNum) || startNum < 1) {
+      return NextResponse.json(
+        { error: 'inicio debe ser un entero mayor o igual a 1' },
         { status: 400 }
       );
     }
@@ -34,10 +52,10 @@ export async function POST(request: Request) {
       archive.on('error', reject);
     });
 
-    // Generate QR codes and add to archive
+    // Generar PNG en memoria (rangos muy grandes pueden tardar o consumir RAM).
     for (let i = 0; i < cantidad; i++) {
-      const num = inicio + i;
-      const qrId = `QR-${String(num).padStart(3, '0')}`;
+      const num = startNum + i;
+      const qrId = formatQrSerieId(num);
       const qrBuffer = await QRCode.toBuffer(qrId, {
         type: 'png',
         width: 300,
