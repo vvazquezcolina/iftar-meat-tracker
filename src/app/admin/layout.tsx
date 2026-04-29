@@ -70,11 +70,11 @@ export default function AdminLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-[#0f0f23] text-white flex flex-col">
-      <main className="flex-1 pb-20">{children}</main>
+    <div className="min-h-screen bg-[#0f0f23] text-white flex flex-col print:bg-white">
+      <main className="flex-1 pb-20 print:pb-0">{children}</main>
 
       {!isLoginPage && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 safe-area-bottom">
+        <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 safe-area-bottom print:hidden">
           <div className="max-w-md mx-auto flex justify-around items-center py-2">
             {navItems.map((item) => {
               const isActive = item.href === '/' ? pathname === '/' : pathname === item.href;
