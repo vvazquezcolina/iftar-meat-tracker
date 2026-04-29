@@ -112,6 +112,18 @@ export default function QrPrintView() {
           padding: 0 !important;
           margin: 0 !important;
         }
+        /* En print, eliminamos cualquier wrapper que pudiera empujar la
+           celda fuera de la hoja (max-w, mx-auto, etc.). Cada celda debe
+           ocupar exactamente la página de @page. */
+        .qr-print-sheet > * {
+          max-width: none !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+          padding: 0 !important;
+        }
+        .qr-print-cell {
+          margin: 0 !important;
+        }
       }
     `;
     return () => {
@@ -271,12 +283,12 @@ export default function QrPrintView() {
         )}
       </div>
 
-      <div className="qr-print-sheet bg-white text-black print:bg-white px-2 py-4 print:py-0">
-        <div className="mx-auto max-w-[120mm]">
+      <div className="qr-print-sheet bg-white text-black print:bg-white px-2 py-4 print:p-0">
+        <div className="mx-auto max-w-[120mm] print:max-w-none print:mx-0">
           {labels.map((row, index) => (
             <div
               key={row.id}
-              className="flex flex-col items-center justify-center box-border border border-dashed border-gray-300 print:border-0 mx-auto"
+              className="qr-print-cell flex flex-col items-center justify-center box-border border border-dashed border-gray-300 print:border-0 mx-auto"
               style={{
                 width: `${preset.widthMm}mm`,
                 height: `${preset.heightMm}mm`,
