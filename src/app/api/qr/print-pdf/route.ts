@@ -25,10 +25,12 @@ export async function POST(request: Request) {
       cantidad,
       inicio = 1,
       presetId = QR_PRINT_DEFAULT_PRESET_ID,
+      includeId = false,
     } = body as {
       cantidad?: number;
       inicio?: number;
       presetId?: string;
+      includeId?: boolean;
     };
 
     if (!cantidad || cantidad < 1) {
@@ -62,7 +64,13 @@ export async function POST(request: Request) {
 
     const pageWidthPt = mmToPt(preset.widthMm);
     const pageHeightPt = mmToPt(preset.heightMm);
-    const qrSizePt = mmToPt(preset.qrSizeMm);
+    // Sin texto: aprovechamos el lado más corto de la etiqueta para que el
+    // QR sea lo más grande posible (con un mínimo de padding por seguridad).
+    // Con texto: respetamos el qrSizeMm del preset y reservamos espacio abajo.
+    const safetyPaddingPt = mmToPt(2);
+    const qrSizePt = includeId
+      ? mmToPt(preset.qrSizeMm)
+      : Math.min(pageWidthPt, pageHeightPt) - safetyPaddingPt * 2;
     const paddingPt = mmToPt(preset.paddingMm);
     const gapPt = mmToPt(1.5);
     const textSizePt = mmToPt(2.8);
@@ -72,11 +80,14 @@ export async function POST(request: Request) {
     const pdfDoc = await PDFDocument.create();
     pdfDoc.setTitle(`Etiquetas QR ${formatQrSerieId(startNum)}-${formatQrSerieId(startNum + cantidad - 1)}`);
     pdfDoc.setProducer('iftar-meat-tracker');
-    const font = await pdfDoc.embedFont(StandardFonts.Courier);
+    const font = includeId
+      ? await pdfDoc.embedFont(StandardFonts.Courier)
+      : null;
 
     // QR PNG a alta resolución para que no pixelee en impresión 203 dpi.
-    // ~600 px en un QR de 40 mm ≈ 380 dpi efectivo. Suficiente para térmicas.
-    const qrPxSize = Math.max(400, Math.round(preset.qrSizeMm * 15));
+    // Usamos el tamaño físico final del QR para escalar.
+    const qrTargetMm = qrSizePt / MM_TO_PT;
+    const qrPxSize = Math.max(400, Math.round(qrTargetMm * 15));
 
     for (let i = 0; i < cantidad; i++) {
       const num = startNum + i;
@@ -94,33 +105,42 @@ export async function POST(request: Request) {
 
       const page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
 
-      // Composición vertical centrada: padding superior, QR, gap, texto,
-      // padding inferior. Si no entra perfecto, recortamos del padding.
-      const totalContentHeight = qrSizePt + gapPt + textSizePt;
-      const verticalSlack = pageHeightPt - totalContentHeight - paddingPt * 2;
-      const topPadding = paddingPt + Math.max(0, verticalSlack / 2);
-
-      // pdf-lib origin = bottom-left; convertimos pensando "desde arriba".
-      const qrTopFromTop = topPadding;
-      const qrYBottom = pageHeightPt - qrTopFromTop - qrSizePt;
       const qrX = (pageWidthPt - qrSizePt) / 2;
 
-      page.drawImage(qrImage, {
-        x: qrX,
-        y: qrYBottom,
-        width: qrSizePt,
-        height: qrSizePt,
-      });
+      if (includeId && font) {
+        // Composición vertical centrada: padding superior, QR, gap, texto,
+        // padding inferior. Si no entra perfecto, recortamos del padding.
+        const totalContentHeight = qrSizePt + gapPt + textSizePt;
+        const verticalSlack = pageHeightPt - totalContentHeight - paddingPt * 2;
+        const topPadding = paddingPt + Math.max(0, verticalSlack / 2);
+        const qrYBottom = pageHeightPt - topPadding - qrSizePt;
 
-      const textWidth = font.widthOfTextAtSize(id, textSizePt);
-      const textBaseline = qrYBottom - gapPt - textSizePt * 0.78; // ~ascent
-      page.drawText(id, {
-        x: (pageWidthPt - textWidth) / 2,
-        y: Math.max(paddingPt * 0.5, textBaseline),
-        size: textSizePt,
-        font,
-        color: rgb(0, 0, 0),
-      });
+        page.drawImage(qrImage, {
+          x: qrX,
+          y: qrYBottom,
+          width: qrSizePt,
+          height: qrSizePt,
+        });
+
+        const textWidth = font.widthOfTextAtSize(id, textSizePt);
+        const textBaseline = qrYBottom - gapPt - textSizePt * 0.78; // ~ascent
+        page.drawText(id, {
+          x: (pageWidthPt - textWidth) / 2,
+          y: Math.max(paddingPt * 0.5, textBaseline),
+          size: textSizePt,
+          font,
+          color: rgb(0, 0, 0),
+        });
+      } else {
+        // Solo QR, centrado vertical y horizontalmente en la etiqueta.
+        const qrYBottom = (pageHeightPt - qrSizePt) / 2;
+        page.drawImage(qrImage, {
+          x: qrX,
+          y: qrYBottom,
+          width: qrSizePt,
+          height: qrSizePt,
+        });
+      }
     }
 
     const pdfBytes = await pdfDoc.save();
