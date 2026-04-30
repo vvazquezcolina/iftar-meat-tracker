@@ -18,8 +18,9 @@ export default function QrGeneratePage() {
   const [hasta, setHasta] = useState(50);
   const [presetId, setPresetId] = useState(QR_PRINT_DEFAULT_PRESET_ID);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<'zip' | 'pdf' | null>(null);
   const [userName, setUserName] = useState('');
   const [userPin, setUserPin] = useState('');
 
@@ -68,7 +69,7 @@ export default function QrGeneratePage() {
 
     setLoading(true);
     setError('');
-    setSuccess(false);
+    setSuccess(null);
 
     try {
       const res = await fetch('/api/qr/generate', {
@@ -96,7 +97,7 @@ export default function QrGeneratePage() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      setSuccess(true);
+      setSuccess('zip');
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Error al generar QR codes'
@@ -106,20 +107,55 @@ export default function QrGeneratePage() {
     }
   };
 
-  const handlePrint = () => {
+  const handleDownloadPdf = async () => {
     const v = validateRange();
     if (v) {
       setError(v);
       return;
     }
+
+    setPdfLoading(true);
     setError('');
-    setSuccess(false);
-    const q = new URLSearchParams({
-      inicio: String(desde),
-      hasta: String(hasta),
-      preset: presetId,
-    });
-    router.push(`/admin/qr-print?${q.toString()}`);
+    setSuccess(null);
+
+    try {
+      const res = await fetch('/api/qr/print-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-name': userName,
+          'x-user-pin': userPin,
+        },
+        body: JSON.stringify({
+          cantidad: total,
+          inicio: desde,
+          presetId,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al generar el PDF');
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `qr-labels-${previewStart}-a-${previewEnd}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      setSuccess('pdf');
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Error al generar el PDF'
+      );
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   return (
@@ -154,7 +190,7 @@ export default function QrGeneratePage() {
         </div>
       )}
 
-      {success && (
+      {success === 'zip' && (
         <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-2">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -171,6 +207,35 @@ export default function QrGeneratePage() {
             />
           </svg>
           ZIP descargado correctamente
+        </div>
+      )}
+
+      {success === 'pdf' && (
+        <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-200 text-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 shrink-0 text-emerald-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+            <span className="font-semibold text-emerald-400">
+              PDF descargado
+            </span>
+          </div>
+          <p>
+            Ábrelo en Vista Previa de macOS, papel <b>Etiquetas 76×51</b>,
+            orientación <b>Vertical</b>, escala <b>100%</b> (no &quot;Ajustar
+            al tamaño del papel&quot;). Cada página = 1 etiqueta.
+          </p>
         </div>
       )}
 
@@ -201,7 +266,7 @@ export default function QrGeneratePage() {
                   value={desde}
                   onChange={(e) => {
                     setDesde(parseInt(e.target.value, 10) || 0);
-                    setSuccess(false);
+                    setSuccess(null);
                   }}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-lg"
                 />
@@ -216,7 +281,7 @@ export default function QrGeneratePage() {
                   value={hasta}
                   onChange={(e) => {
                     setHasta(parseInt(e.target.value, 10) || 0);
-                    setSuccess(false);
+                    setSuccess(null);
                   }}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-lg"
                 />
@@ -235,7 +300,7 @@ export default function QrGeneratePage() {
                 value={presetId}
                 onChange={(e) => {
                   setPresetId(e.target.value);
-                  setSuccess(false);
+                  setSuccess(null);
                 }}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-base"
               >
@@ -324,14 +389,72 @@ export default function QrGeneratePage() {
         <div className="flex flex-col gap-3">
           <button
             type="button"
-            onClick={handleDownload}
-            disabled={loading || total < 1}
+            onClick={handleDownloadPdf}
+            disabled={pdfLoading || loading || total < 1}
             className="w-full min-h-14 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-gray-950 font-bold text-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+          >
+            {pdfLoading ? (
+              <>
+                <svg
+                  className="animate-spin h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                Generando PDF…
+              </>
+            ) : (
+              <>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                Descargar PDF para imprimir
+              </>
+            )}
+          </button>
+          <p className="text-xs text-gray-500 text-center px-2">
+            Cada página = 1 etiqueta a tamaño exacto. Ábrelo en{' '}
+            <b className="text-gray-300">Vista Previa de macOS</b> e imprime
+            con papel <b className="text-gray-300">Etiquetas 76×51</b>,
+            orientación <b className="text-gray-300">Vertical</b>, escala{' '}
+            <b className="text-gray-300">100%</b>.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={loading || pdfLoading || total < 1}
+            className="w-full min-h-12 rounded-xl bg-gray-800 hover:bg-gray-700 active:bg-gray-900 text-gray-200 font-medium text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-gray-700"
           >
             {loading ? (
               <>
                 <svg
-                  className="animate-spin h-5 w-5"
+                  className="animate-spin h-4 w-4"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
@@ -356,7 +479,7 @@ export default function QrGeneratePage() {
               <>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
+                  className="h-5 w-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -368,37 +491,10 @@ export default function QrGeneratePage() {
                     d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                   />
                 </svg>
-                Descargar ZIP
+                Descargar ZIP de PNGs (avanzado)
               </>
             )}
           </button>
-
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={loading || total < 1}
-            className="w-full min-h-14 rounded-xl bg-white hover:bg-gray-100 active:bg-gray-200 text-gray-950 font-bold text-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 border border-gray-300"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
-              />
-            </svg>
-            Imprimir (vista lista)
-          </button>
-          <p className="text-xs text-gray-500 text-center">
-            Se abrirá la hoja de impresión; elige tu Ribetec y confirma. En
-            rangos grandes primero verás una barra de progreso.
-          </p>
         </div>
       </div>
     </div>
